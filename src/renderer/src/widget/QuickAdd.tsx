@@ -7,6 +7,8 @@ export function QuickAdd({ onDone }: { onDone: () => void }): React.JSX.Element 
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [error, setError] = useState(false)
+  const [failure, setFailure] = useState('')
+  const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => inputRef.current?.focus(), [])
@@ -17,7 +19,20 @@ export function QuickAdd({ onDone }: { onDone: () => void }): React.JSX.Element 
       inputRef.current?.focus()
       return
     }
-    await api.tasks.create({ name: name.trim(), dueAt: toDueString(date) })
+    if (busy) return
+    setBusy(true)
+    setFailure('')
+    try {
+      await api.tasks.create({ name: name.trim(), dueAt: toDueString(date) })
+    } catch (err) {
+      // Keep the form open with the text intact so the user can retry.
+      const msg = err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '') : ''
+      setFailure(msg || 'Could not add the task')
+      inputRef.current?.focus()
+      return
+    } finally {
+      setBusy(false)
+    }
     setName('')
     if (!keepOpen) onDone()
     else inputRef.current?.focus()
@@ -41,6 +56,7 @@ export function QuickAdd({ onDone }: { onDone: () => void }): React.JSX.Element 
         onChange={(e) => {
           setName(e.target.value)
           setError(false)
+          setFailure('')
         }}
       />
       <div className="quick-add-row">
@@ -63,10 +79,15 @@ export function QuickAdd({ onDone }: { onDone: () => void }): React.JSX.Element 
         <button type="button" className="mini-btn" onClick={onDone}>
           Cancel
         </button>
-        <button type="submit" className="mini-btn primary">
+        <button type="submit" className="mini-btn primary" disabled={busy}>
           Add
         </button>
       </div>
+      {failure && (
+        <div className="quick-add-error" role="alert">
+          {failure}
+        </div>
+      )}
     </form>
   )
 }

@@ -38,10 +38,13 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: npm version --no-git-tag-version --allow-same-version $env:GITHUB_REF_NAME.Substring(1)
+
       - name: Build installer and portable exe
         run: npm run dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

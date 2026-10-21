@@ -96,11 +96,13 @@ export function countdownLabel(due: DueString | null | undefined, now: Date): st
   const time = p.hasTime ? formatTime(p.hour!, p.minute!) : ''
 
   if (deadline.getTime() < now.getTime()) {
-    if (d === 0) {
-      const mins = Math.max(1, Math.floor((now.getTime() - deadline.getTime()) / 60_000))
+    const elapsed = now.getTime() - deadline.getTime()
+    // Timed dues: label by elapsed time so "23:59 yesterday" reads "2 min overdue", not "1 day".
+    if (p.hasTime && elapsed < 86_400_000) {
+      const mins = Math.max(1, Math.floor(elapsed / 60_000))
       return mins < 60 ? `${mins} min overdue` : `${Math.floor(mins / 60)} h overdue`
     }
-    const n = -d
+    const n = Math.max(1, -d)
     return n === 1 ? '1 day overdue' : `${n} days overdue`
   }
   if (d === 0) return time ? `Today ${time}` : 'Today'
@@ -137,9 +139,13 @@ export function localDateString(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** Strict ISO-8601 timestamp with an explicit zone, e.g. "2026-10-21T17:00:00Z". */
+const ISO_ZONED_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/
+
 /**
- * Coerces unknown persisted values into a valid due string. Accepts the native
- * formats plus full ISO timestamps (converted to local wall-clock time).
+ * Coerces unknown values into a valid due string. Accepts the native formats, local
+ * "YYYY-MM-DDTHH:mm:ss(.sss)" and zoned ISO-8601 timestamps (converted to local
+ * wall-clock time). Anything else returns null.
  */
 export function normalizeDue(value: unknown): DueString | null {
   if (typeof value !== 'string' || value.trim() === '') return null
@@ -147,6 +153,7 @@ export function normalizeDue(value: unknown): DueString | null {
   if (isValidDue(v)) return v
   const secs = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):\d{2}(\.\d+)?$/.exec(v)
   if (secs && isValidDue(secs[1])) return secs[1]
+  if (!ISO_ZONED_RE.test(v)) return null
   const t = Date.parse(v)
   if (Number.isNaN(t)) return null
   const d = new Date(t)

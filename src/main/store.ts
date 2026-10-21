@@ -126,14 +126,45 @@ export interface LoadResult {
   /** Path the unreadable file was moved to, if the data file was corrupt. */
   backupPath?: string
   migratedFrom?: number
+  /** Copy of the original file kept before a migration rewrote it. */
+  migrationBackupPath?: string
 }
 
 export function dataFilePath(dir: string): string {
   return path.join(dir, DATA_FILE_NAME)
 }
 
+/** Removes temp files orphaned by a crash between writing and renaming in saveData(). */
+export function cleanupTempFiles(dir: string): void {
+  let names: string[]
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    if (name.startsWith(`${DATA_FILE_NAME}.`) && name.endsWith('.tmp')) {
+      try {
+        fs.rmSync(path.join(dir, name), { force: true })
+      } catch {
+        /* still locked; try again next launch */
+      }
+    }
+  }
+}
+
+/** True when a parsed root looks like something migrate() understands. */
+function isRecognizedShape(raw: unknown): boolean {
+  if (Array.isArray(raw)) return true
+  if (!isObj(raw)) return false
+  if ('tasks' in raw && !Array.isArray(raw.tasks)) return false
+  if ('settings' in raw && raw.settings !== undefined && !isObj(raw.settings)) return false
+  return true
+}
+
 export function loadData(dir: string): LoadResult {
   const file = dataFilePath(dir)
+  cleanupTempFiles(dir)
   let text: string
   try {
     text = fs.readFileSync(file, 'utf8')
@@ -142,9 +173,14 @@ export function loadData(dir: string): LoadResult {
     throw err
   }
   let raw: unknown
+  let parsed = true
   try {
     raw = JSON.parse(text.replace(/^﻿/, ''))
   } catch {
+    parsed = false
+  }
+  // Valid JSON of the wrong shape (null, "x", 42, {"tasks":"oops"}) is just as unreadable.
+  if (!parsed || !isRecognizedShape(raw)) {
     const backupPath = `${file}.corrupt-${Date.now()}`
     fs.renameSync(file, backupPath)
     return { data: defaultData(), backupPath }
@@ -210,8 +246,16 @@ export class Store {
     this.firstRun = !fs.existsSync(dataFilePath(dir))
     const { data, ...info } = loadData(dir)
     this.data = data
+    if (info.migratedFrom !== undefined && !this.firstRun) {
+      // Keep the original before rewriting it in the current schema: a file from a newer
+      // version may hold fields this build does not know and would otherwise drop.
+      const file = dataFilePath(dir)
+      const backup = `${file}.v${info.migratedFrom}-backup-${Date.now()}`
+      fs.copyFileSync(file, backup)
+      info.migrationBackupPath = backup
+      saveData(dir, this.data)
+    }
     this.loadInfo = info
-    if (info.migratedFrom !== undefined && !this.firstRun) saveData(dir, this.data)
   }
 
   onChange(fn: (kind: ChangeKind) => void): () => void {
@@ -219,9 +263,22 @@ export class Store {
     return () => this.listeners.delete(fn)
   }
 
-  private commit(kind: ChangeKind): void {
-    saveData(this.dir, this.data)
+  /**
+   * Runs a mutation and persists it. If the mutation throws or the save fails, the in-memory
+   * state is rolled back so memory, disk and the renderers never disagree.
+   */
+  private transact<T>(kind: ChangeKind, fn: () => T): T {
+    const snapshot = structuredClone(this.data)
+    let result: T
+    try {
+      result = fn()
+      saveData(this.dir, this.data)
+    } catch (err) {
+      this.data = snapshot
+      throw err
+    }
     for (const l of this.listeners) l(kind)
+    return result
   }
 
   getTasks(): Task[] {
@@ -248,37 +305,57 @@ export class Store {
     return n
   }
 
+  private cleanDescription(value: unknown): string {
+    if (value === null || value === undefined) return ''
+    if (typeof value !== 'string') throw new ValidationError('Description must be text')
+    return value.slice(0, DESCRIPTION_MAX)
+  }
+
+  /** null, undefined or '' clear the due date; anything else must be a valid due value. */
+  private cleanDue(value: unknown): Task['dueAt'] {
+    if (value === null || value === undefined || value === '') return null
+    const due = normalizeDue(value)
+    if (due === null) throw new ValidationError('Invalid due date')
+    return due
+  }
+
   createTask(input: TaskInput): Task {
     const now = this.clock().toISOString()
     const task: Task = {
       id: randomUUID(),
       name: this.cleanName(input.name),
-      description: typeof input.description === 'string' ? input.description.slice(0, DESCRIPTION_MAX) : '',
-      dueAt: normalizeDue(input.dueAt ?? null),
+      description: this.cleanDescription(input.description),
+      dueAt: this.cleanDue(input.dueAt),
       completed: false,
       completedAt: null,
       createdAt: now,
       updatedAt: now
     }
-    this.data.tasks.push(task)
-    this.commit('tasks')
+    this.transact('tasks', () => this.data.tasks.push(task))
     return { ...task }
   }
 
   updateTask(id: string, patch: TaskPatch): Task {
-    const task = this.data.tasks.find((t) => t.id === id)
-    if (!task) throw new ValidationError('Task not found')
+    const current = this.data.tasks.find((t) => t.id === id)
+    if (!current) throw new ValidationError('Task not found')
+    // Validate everything before touching state.
+    const next: Task = { ...current }
     const now = this.clock().toISOString()
-    if (patch.name !== undefined) task.name = this.cleanName(patch.name)
-    if (patch.description !== undefined) task.description = String(patch.description).slice(0, DESCRIPTION_MAX)
-    if (patch.dueAt !== undefined) task.dueAt = normalizeDue(patch.dueAt)
-    if (patch.completed !== undefined && patch.completed !== task.completed) {
-      task.completed = Boolean(patch.completed)
-      task.completedAt = task.completed ? now : null
+    if (patch.name !== undefined) next.name = this.cleanName(patch.name)
+    if (patch.description !== undefined) next.description = this.cleanDescription(patch.description)
+    if (patch.dueAt !== undefined) next.dueAt = this.cleanDue(patch.dueAt)
+    if (patch.completed !== undefined) {
+      if (typeof patch.completed !== 'boolean') throw new ValidationError('completed must be true or false')
+      if (patch.completed !== current.completed) {
+        next.completed = patch.completed
+        next.completedAt = patch.completed ? now : null
+      }
     }
-    task.updatedAt = now
-    this.commit('tasks')
-    return { ...task }
+    next.updatedAt = now
+    this.transact('tasks', () => {
+      this.data.tasks = this.data.tasks.map((t) => (t.id === id ? next : t))
+    })
+    return { ...next }
   }
 
   toggleTask(id: string): Task {
@@ -288,23 +365,23 @@ export class Store {
   }
 
   deleteTask(id: string): boolean {
-    const before = this.data.tasks.length
-    this.data.tasks = this.data.tasks.filter((t) => t.id !== id)
-    if (this.data.tasks.length === before) return false
-    this.data.notified = this.data.notified.filter((k) => !k.startsWith(`${id}|`))
-    this.commit('tasks')
+    if (!this.data.tasks.some((t) => t.id === id)) return false
+    this.transact('tasks', () => {
+      this.data.tasks = this.data.tasks.filter((t) => t.id !== id)
+      this.data.notified = this.data.notified.filter((k) => !k.startsWith(`${id}|`))
+    })
     return true
   }
 
   setLaunchAtStartup(value: boolean): void {
-    this.data.settings.launchAtStartup = Boolean(value)
-    this.commit('settings')
+    this.transact('settings', () => {
+      this.data.settings.launchAtStartup = Boolean(value)
+    })
   }
 
   addWidget(bounds: Pick<Bounds, 'x' | 'y'> & Partial<Bounds>, overrides: WidgetPatch = {}): WidgetConfig {
     const widget = sanitizeWidget({ ...WIDGET_DEFAULTS, ...overrides, ...bounds, id: randomUUID() })!
-    this.data.settings.widgets.push(widget)
-    this.commit('settings')
+    this.transact('settings', () => this.data.settings.widgets.push(widget))
     return { ...widget }
   }
 
@@ -312,16 +389,17 @@ export class Store {
     const idx = this.data.settings.widgets.findIndex((w) => w.id === id)
     if (idx < 0) throw new ValidationError('Widget not found')
     const merged = sanitizeWidget({ ...this.data.settings.widgets[idx], ...patch, id })!
-    this.data.settings.widgets[idx] = merged
-    this.commit('settings')
+    this.transact('settings', () => {
+      this.data.settings.widgets[idx] = merged
+    })
     return { ...merged }
   }
 
   removeWidget(id: string): boolean {
-    const before = this.data.settings.widgets.length
-    this.data.settings.widgets = this.data.settings.widgets.filter((w) => w.id !== id)
-    if (this.data.settings.widgets.length === before) return false
-    this.commit('settings')
+    if (!this.data.settings.widgets.some((w) => w.id === id)) return false
+    this.transact('settings', () => {
+      this.data.settings.widgets = this.data.settings.widgets.filter((w) => w.id !== id)
+    })
     return true
   }
 

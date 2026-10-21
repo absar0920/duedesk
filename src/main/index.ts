@@ -1,4 +1,7 @@
-import { app, dialog } from 'electron'
+import fs from 'node:fs'
+import path from 'node:path'
+import { app, dialog, shell } from 'electron'
+import { SCHEMA_VERSION } from '../shared/constants'
 import { IPC } from '../shared/ipc'
 import { registerIpc } from './ipc'
 import { DueNotifier } from './notifications'
@@ -9,10 +12,42 @@ import { WindowManager } from './windows'
 const APP_ID = 'com.absar0920.duedesk'
 const startHidden = process.argv.includes('--hidden')
 
+/**
+ * Windows only shows toasts for a Win32 app whose AppUserModelID is registered through a Start
+ * Menu shortcut. The NSIS installer creates one; the portable exe does not, so register it here.
+ */
+function registerPortableAumid(): void {
+  const portableExe = process.env['PORTABLE_EXECUTABLE_FILE']
+  if (process.platform !== 'win32' || !app.isPackaged || !portableExe) return
+  try {
+    const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'DueDesk.lnk')
+    if (fs.existsSync(lnk)) {
+      try {
+        const cur = shell.readShortcutLink(lnk)
+        // Any working shortcut with our AUMID (installer-made or an earlier portable run) is enough;
+        // rewrite only when it is missing the id or points to an exe that was moved or deleted.
+        if (cur.appUserModelId === APP_ID && fs.existsSync(cur.target)) return
+      } catch {
+        /* unreadable shortcut: rewrite it */
+      }
+    }
+    shell.writeShortcutLink(lnk, 'create', {
+      target: portableExe,
+      appUserModelId: APP_ID,
+      description: 'DueDesk (portable)',
+      icon: portableExe,
+      iconIndex: 0
+    })
+  } catch {
+    /* notifications just won't show; nothing else depends on this */
+  }
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.setAppUserModelId(APP_ID)
+  registerPortableAumid()
 
   let windows: WindowManager | null = null
   let tray: AppTray | null = null
@@ -44,6 +79,13 @@ if (!app.requestSingleInstanceLock()) {
       dialog.showErrorBox(
         'DueDesk',
         `The data file was unreadable and has been moved to:\n${store.loadInfo.backupPath}\nDueDesk started with an empty list.`
+      )
+    }
+    const { migratedFrom, migrationBackupPath } = store.loadInfo
+    if (migratedFrom !== undefined && migratedFrom > SCHEMA_VERSION && migrationBackupPath) {
+      dialog.showErrorBox(
+        'DueDesk',
+        `The data file was written by a newer version of DueDesk. Fields this version does not know about were dropped.\nThe original file was kept at:\n${migrationBackupPath}`
       )
     }
 

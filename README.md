@@ -49,7 +49,8 @@ _Screenshots coming soon._
 ## Download
 
 Every push to `main` builds Windows binaries in GitHub Actions. You can download them from the
-**Actions** run's artifacts. Tagged versions (`v*`) are published on the **Releases** page:
+**Actions** run's artifacts. Tagged versions (`v*`) are published on the **Releases** page; the workflow sets the app version from
+the tag, so `v1.2.0` produces `DueDesk-Setup-1.2.0-x64.exe`:
 
 - `DueDesk-Setup-<version>-x64.exe` is the installer (per user, and lets you choose a folder).
 - `DueDesk-Portable-<version>-x64.exe` is a single portable executable.
@@ -95,8 +96,19 @@ resources/    runtime icons (tray, notifications)
 
 Everything is saved to `%APPDATA%\DueDesk\duedesk-data.json`. The file is versioned and written
 atomically: DueDesk writes a temporary file, flushes it, and then renames it over the old one.
-If the file ever becomes unreadable, DueDesk moves it aside as `duedesk-data.json.corrupt-<timestamp>`
-and starts with an empty list. DueDesk makes no network requests.
+If the file ever becomes unreadable (invalid JSON or an unexpected shape), DueDesk moves it aside as
+`duedesk-data.json.corrupt-<timestamp>` and starts with an empty list. Before upgrading a file written
+by an older or newer schema version, the original is copied to `duedesk-data.json.v<version>-backup-<timestamp>`.
+DueDesk makes no network requests.
+
+A task's `dueAt` is a **local** ISO-8601 date or date-time with no time zone: `"YYYY-MM-DD"` (date
+only, due at the end of that day) or `"YYYY-MM-DDTHH:mm"`, or `null` for no due date. This is a
+deliberate choice over UTC timestamps: a date-only due stays on the same calendar day wherever the
+PC's clock is set. Zoned ISO timestamps (for example `2026-10-21T17:00:00Z`) are accepted on input
+and converted to local wall-clock time.
+
+The portable exe registers a `DueDesk` Start Menu shortcut on first run. Windows needs it to show
+due-time notifications for apps that are not installed.
 
 Security: the renderers run with `contextIsolation`, `sandbox` and no `nodeIntegration`. All
 access goes through a small typed IPC bridge.

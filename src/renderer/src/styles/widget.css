@@ -127,7 +127,8 @@ body.page-widget {
   color: #fff;
 }
 .hdr-btn.on {
-  color: var(--amber);
+  /* Active state stays single-tone like the reference; only a subtle backdrop marks it. */
+  background: rgba(255, 255, 255, 0.08);
 }
 .hdr-flag {
   display: grid;
@@ -159,6 +160,11 @@ body.page-widget {
 }
 .quick-add > input.invalid {
   border-color: var(--red);
+}
+.quick-add-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--red);
 }
 .quick-add-row {
   display: flex;
@@ -303,6 +309,21 @@ body.page-widget {
 .w-row:focus-within .w-actions {
   opacity: 1;
   pointer-events: auto;
+}
+/* While the action pill is visible, reserve its width and truncate the name instead of hiding text under it. */
+.w-row:hover .w-row-text,
+.w-row:focus-within .w-row-text {
+  padding-right: 70px;
+}
+.w-row.locked:hover .w-row-text,
+.w-row.locked:focus-within .w-row-text {
+  padding-right: 30px;
+}
+.w-row:not(.expanded):hover .w-name,
+.w-row:not(.expanded):focus-within .w-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .round-btn {
   display: grid;

@@ -1,7 +1,9 @@
 /**
- * Due date encoding (local wall-clock time, no timezone):
+ * Due date encoding: a LOCAL ISO-8601 date or date-time with no time zone (deliberately not a
+ * UTC timestamp, so date-only dues stay on their calendar day):
  *  - "YYYY-MM-DD"        date only, counts as the END of that day
  *  - "YYYY-MM-DDTHH:mm"  date with a specific time
+ * Zoned ISO timestamps are accepted on input and converted to local time by normalizeDue().
  */
 export type DueString = string
 

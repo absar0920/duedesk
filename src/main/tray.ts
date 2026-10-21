@@ -16,8 +16,13 @@ export class AppTray {
   private tray: Tray
 
   constructor(private readonly actions: TrayActions) {
-    const icon = nativeImage.createFromPath(iconPath(process.platform === 'win32' ? 'ico' : 'png'))
-    this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }))
+    if (process.platform === 'win32') {
+      // Pass the multi-resolution .ico path so Windows picks the right size for the current DPI.
+      this.tray = new Tray(iconPath('ico'))
+    } else {
+      const icon = nativeImage.createFromPath(iconPath('png'))
+      this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }))
+    }
     this.tray.setToolTip('DueDesk')
     this.tray.on('click', () => this.actions.openMain())
     this.tray.on('double-click', () => this.actions.openMain())

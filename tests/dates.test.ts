@@ -86,6 +86,9 @@ describe('countdownLabel', () => {
     expect(countdownLabel('2026-10-21T07:00', NOW)).toBe('3 h overdue')
     expect(countdownLabel('2026-10-20', NOW)).toBe('1 day overdue')
     expect(countdownLabel('2026-10-19T18:00', NOW)).toBe('2 days overdue')
+    // Timed dues just past midnight use elapsed time, not the calendar day change.
+    expect(countdownLabel('2026-10-21T23:59', new Date(2026, 9, 22, 0, 1))).toBe('2 min overdue')
+    expect(countdownLabel('2026-10-21T20:00', new Date(2026, 9, 22, 9, 0))).toBe('13 h overdue')
   })
   it('flips across midnight', () => {
     expect(countdownLabel('2026-10-22', new Date(2026, 9, 21, 23, 59))).toBe('Tomorrow')
@@ -126,6 +129,12 @@ describe('formatting helpers', () => {
     expect(normalizeDue('garbage')).toBeNull()
     expect(normalizeDue(42)).toBeNull()
     expect(normalizeDue('')).toBeNull()
+    expect(normalizeDue('1')).toBeNull()
+    expect(normalizeDue('Task 12')).toBeNull()
+    expect(normalizeDue('Oct 21 2026')).toBeNull()
+    const zoned = new Date(Date.UTC(2026, 9, 21, 17, 0))
+    const local = `${zoned.getFullYear()}-${String(zoned.getMonth() + 1).padStart(2, '0')}-${String(zoned.getDate()).padStart(2, '0')}T${String(zoned.getHours()).padStart(2, '0')}:00`
+    expect(normalizeDue('2026-10-21T17:00:00Z')).toBe(local)
   })
   it('msUntilNextMinute lands just after the boundary', () => {
     expect(msUntilNextMinute(new Date(2026, 9, 21, 10, 30, 59, 900))).toBe(150)

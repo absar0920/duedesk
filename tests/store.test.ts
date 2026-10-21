@@ -31,6 +31,26 @@ describe('loadData', () => {
     expect(fs.existsSync(dataFilePath(dir))).toBe(false)
   })
 
+  it.each(['null', '"x"', '42', '{"tasks":"oops"}', '{"tasks":[],"settings":3}'])(
+    'treats valid JSON of the wrong shape (%s) as corrupt',
+    (content) => {
+      writeRaw(content)
+      const res = loadData(dir)
+      expect(res.data).toEqual(defaultData())
+      expect(fs.readFileSync(res.backupPath!, 'utf8')).toBe(content)
+      expect(fs.existsSync(dataFilePath(dir))).toBe(false)
+    }
+  )
+
+  it('removes temp files orphaned by an interrupted save', () => {
+    saveData(dir, defaultData())
+    const orphan = path.join(dir, `${DATA_FILE_NAME}.1234.abcd1234.tmp`)
+    fs.writeFileSync(orphan, '{"partial')
+    loadData(dir)
+    expect(fs.existsSync(orphan)).toBe(false)
+    expect(fs.existsSync(dataFilePath(dir))).toBe(true)
+  })
+
   it('tolerates a UTF-8 BOM', () => {
     writeRaw('﻿' + JSON.stringify(defaultData()))
     expect(loadData(dir).data).toEqual(defaultData())
@@ -161,6 +181,50 @@ describe('Store', () => {
     expect(again.getSettings().widgets).toHaveLength(1)
     expect(again.removeWidget(w.id)).toBe(true)
     expect(new Store(dir).getSettings().widgets).toEqual([])
+  })
+
+  it('backs up a file from another schema version before rewriting it', () => {
+    const original = JSON.stringify({
+      version: SCHEMA_VERSION + 1,
+      tasks: [{ id: 'a', name: 'Future', priority: 3, tags: ['x'] }],
+      extra: true
+    })
+    writeRaw(original)
+    const store = new Store(dir)
+    expect(store.loadInfo.migratedFrom).toBe(SCHEMA_VERSION + 1)
+    expect(store.getTasks()).toHaveLength(1)
+    expect(fs.readFileSync(store.loadInfo.migrationBackupPath!, 'utf8')).toBe(original)
+    expect(readRaw().version).toBe(SCHEMA_VERSION)
+  })
+
+  it('rejects invalid due dates and wrongly typed fields instead of silently changing data', () => {
+    const store = new Store(dir, clock)
+    expect(() => store.createTask({ name: 'x', dueAt: 'garbage' })).toThrow(ValidationError)
+    expect(() => store.createTask({ name: 'x', dueAt: '1' })).toThrow(ValidationError)
+    expect(store.getTasks()).toEqual([])
+    const t = store.createTask({ name: 'x', dueAt: '2026-10-25' })
+    expect(() => store.updateTask(t.id, { dueAt: 'garbage' })).toThrow(ValidationError)
+    expect(() => store.updateTask(t.id, { completed: 'false' as unknown as boolean })).toThrow(ValidationError)
+    expect(() => store.updateTask(t.id, { description: 5 as unknown as string })).toThrow(ValidationError)
+    expect(() => store.updateTask(t.id, { name: 'renamed', dueAt: 'bad' })).toThrow(ValidationError)
+    expect(store.getTask(t.id)).toMatchObject({ name: 'x', dueAt: '2026-10-25', completed: false })
+    expect(store.updateTask(t.id, { description: null as unknown as string }).description).toBe('')
+    expect(store.updateTask(t.id, { dueAt: '' }).dueAt).toBeNull()
+  })
+
+  it('rolls back in-memory state when saving fails', () => {
+    const store = new Store(dir, clock)
+    store.createTask({ name: 'kept' })
+    const events: string[] = []
+    store.onChange((k) => events.push(k))
+    // Make the target path a non-empty directory so the atomic rename fails.
+    const file = dataFilePath(dir)
+    fs.rmSync(file)
+    fs.mkdirSync(file)
+    fs.writeFileSync(path.join(file, 'blocker'), '')
+    expect(() => store.createTask({ name: 'lost' })).toThrow()
+    expect(store.getTasks().map((t) => t.name)).toEqual(['kept'])
+    expect(events).toEqual([])
   })
 
   it('tracks notified keys and prunes stale ones', () => {

@@ -39,15 +39,29 @@ export class WindowManager {
 
   /** Marks the app as quitting and writes any not-yet-saved widget bounds. */
   setQuitting(): void {
+    if (this.quitting) return
     this.quitting = true
     for (const [id, t] of this.boundsTimers) {
       clearTimeout(t)
       const win = this.widgets.get(id)
       if (win && !win.isDestroyed() && this.store.getWidget(id)) {
-        this.store.updateWidget(id, win.getBounds())
+        try {
+          this.store.updateWidget(id, win.getBounds())
+        } catch {
+          /* best effort while shutting down */
+        }
       }
     }
     this.boundsTimers.clear()
+  }
+
+  /**
+   * before-quit is not emitted on Windows when the session ends (shutdown, restart, logoff),
+   * so treat the session ending as a quit; otherwise hide-to-tray would block the close.
+   */
+  private quitOnSessionEnd(win: BrowserWindow): void {
+    win.on('query-session-end', () => this.setQuitting())
+    win.on('session-end', () => this.setQuitting())
   }
 
   // ---------------------------------------------------------------- main window
@@ -71,6 +85,7 @@ export class WindowManager {
       }
     })
     hardenWebContents(win)
+    this.quitOnSessionEnd(win)
     win.on('close', (e) => {
       if (!this.quitting) {
         e.preventDefault()
@@ -197,11 +212,12 @@ export class WindowManager {
     win.on('resized', scheduleSave)
     win.on('move', scheduleSave)
     win.on('resize', scheduleSave)
+    this.quitOnSessionEnd(win)
     win.on('close', (e) => {
-      // Alt+F4 on a widget hides it instead of destroying it; removal goes through removeWidget.
+      // Alt+F4 / system-menu Close on a widget does nothing: removal goes through "Remove widget"
+      // and hiding through the tray's Show/Hide widgets toggle, so the two never get out of sync.
       if (!this.quitting && this.widgets.get(id) === win && this.store.getWidget(id)) {
         e.preventDefault()
-        win.hide()
       }
     })
     win.on('closed', () => {

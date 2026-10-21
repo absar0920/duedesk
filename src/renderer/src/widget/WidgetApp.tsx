@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FILTERS, filterLabel } from '@shared/constants'
 import { countByFilter, listTasks } from '@shared/tasks'
 import type { WidgetPatch } from '@shared/types'
-import { IconChevronDown, IconLock, IconPin, IconPlus, IconSliders, IconUnlock } from '../components/Icons'
+import { IconChevronDown, IconGear, IconLock, IconPin, IconPlus, IconUnlock } from '../components/Icons'
 import { useAppData, useDismiss, useNow } from '../hooks'
 import { QuickAdd } from './QuickAdd'
 import { ResizeHandles } from './ResizeHandles'
@@ -90,7 +90,7 @@ export function WidgetApp({ widgetId }: { widgetId: string }): React.JSX.Element
           )}
           <button
             type="button"
-            className={`hdr-btn${locked ? ' on' : ''}`}
+            className="hdr-btn"
             title={locked ? 'Unlock widget' : 'Lock widget'}
             aria-label={locked ? 'Unlock widget' : 'Lock widget'}
             onClick={() => update({ locked: !locked })}
@@ -104,7 +104,7 @@ export function WidgetApp({ widgetId }: { widgetId: string }): React.JSX.Element
             aria-label="Widget settings"
             onClick={() => setPanelOpen((o) => !o)}
           >
-            <IconSliders size={16} />
+            <IconGear size={16} />
           </button>
           {!locked && (
             <button

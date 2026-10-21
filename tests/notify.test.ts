@@ -3,15 +3,16 @@ import { notificationKey, planDueNotifications } from '../src/shared/notify'
 import type { Task } from '../src/shared/types'
 
 const NOW = new Date(2026, 9, 21, 10, 30)
-const mk = (id: string, dueAt: string | null, completed = false): Task => ({
+const EARLIER = new Date(2026, 8, 1).toISOString()
+const mk = (id: string, dueAt: string | null, completed = false, savedAt = EARLIER): Task => ({
   id,
   name: id,
   description: '',
   dueAt,
   completed,
   completedAt: completed ? NOW.toISOString() : null,
-  createdAt: NOW.toISOString(),
-  updatedAt: NOW.toISOString()
+  createdAt: savedAt,
+  updatedAt: savedAt
 })
 
 describe('planDueNotifications', () => {
@@ -32,6 +33,12 @@ describe('planDueNotifications', () => {
     const seen = new Set(['due-now|2026-10-21T10:30'])
     const plan = planDueNotifications(tasks, NOW, (k) => seen.has(k))
     expect(plan.show.map((t) => t.id)).toEqual(['due-earlier'])
+  })
+  it('does not announce a deadline that had already passed when the task was saved', () => {
+    const created = mk('late-entry', '2026-10-21T07:30', false, new Date(2026, 9, 21, 10, 0).toISOString())
+    const plan = planDueNotifications([created], NOW, () => false)
+    expect(plan.show).toEqual([])
+    expect(plan.skip.map((t) => t.id)).toEqual(['late-entry'])
   })
   it('key changes when the due date changes', () => {
     expect(notificationKey(mk('a', '2026-10-21T10:30'))).not.toBe(notificationKey(mk('a', '2026-10-22T10:30')))

@@ -16,7 +16,9 @@ export interface DueNotificationPlan {
 
 /**
  * Decides which tasks need a "due now" notification. Only tasks with an explicit time
- * qualify; each (task, dueAt) pair is notified at most once.
+ * qualify; each (task, dueAt) pair is notified at most once. A deadline is shown when it
+ * passed after the task was last saved (and within `graceMs`, which covers catch-up after
+ * the app was closed); deadlines already in the past when the task was saved are skipped.
  */
 export function planDueNotifications(
   tasks: Task[],
@@ -30,7 +32,11 @@ export function planDueNotifications(
     const deadline = dueDeadline(t.dueAt)!
     if (deadline.getTime() > now.getTime()) continue
     if (isNotified(notificationKey(t))) continue
-    if (now.getTime() - deadline.getTime() <= graceMs) plan.show.push(t)
+    // Only announce deadlines the task actually reached while it was pending. A task created or
+    // edited with a time that had already passed was never "upcoming", so it is handled silently.
+    const updated = Date.parse(t.updatedAt)
+    const wasUpcoming = Number.isNaN(updated) || deadline.getTime() > updated
+    if (wasUpcoming && now.getTime() - deadline.getTime() <= graceMs) plan.show.push(t)
     else plan.skip.push(t)
   }
   return plan

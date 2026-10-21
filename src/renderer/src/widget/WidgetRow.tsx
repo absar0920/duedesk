@@ -20,7 +20,7 @@ export function WidgetRow({
 }): React.JSX.Element {
   const tone = dueClassOf(task, now)
   return (
-    <li className={`w-row${task.completed ? ' completed' : ''}${expanded ? ' expanded' : ''}`}>
+    <li className={`w-row${task.completed ? ' completed' : ''}${expanded ? ' expanded' : ''}${locked ? ' locked' : ''}`}>
       <div className="w-row-main">
         <DueDot tone={tone} />
         <button type="button" className="w-row-text" onClick={onExpand} aria-expanded={expanded}>
