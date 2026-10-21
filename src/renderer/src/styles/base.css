@@ -1,0 +1,271 @@
+:root {
+  --font: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.72);
+  --text-dim: rgba(255, 255, 255, 0.5);
+  --line: rgba(255, 255, 255, 0.09);
+  --glass: rgba(20, 22, 40, 0.55);
+  --glass-strong: rgba(26, 28, 52, 0.98);
+  --amber: #f5b301;
+  --amber-soft: rgba(245, 179, 1, 0.16);
+  --red: #ff5a5f;
+  --green: #34c46a;
+  --blue: #3d9bff;
+  --grey: #8f95b2;
+  --radius: 10px;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+/* Due tone dots (shared by app + widget) */
+.due-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+.due-dot.tone-overdue {
+  background: var(--red);
+  box-shadow: 0 0 6px rgba(255, 90, 95, 0.7);
+}
+.due-dot.tone-today {
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(245, 179, 1, 0.55);
+}
+.due-dot.tone-week {
+  background: var(--blue);
+}
+.due-dot.tone-later,
+.due-dot.tone-none {
+  background: var(--grey);
+}
+.due-dot.tone-done {
+  background: var(--green);
+  opacity: 0.6;
+}
+
+.tone-overdue {
+  --tone: var(--red);
+}
+.tone-today {
+  --tone: var(--amber);
+}
+.tone-week {
+  --tone: #8cc2ff;
+}
+.tone-later,
+.tone-none {
+  --tone: var(--text-dim);
+}
+.tone-done {
+  --tone: var(--green);
+}
+
+/* Chips */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+.chip.active {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+.chip-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--text);
+}
+.chip.alert .chip-count {
+  background: var(--red);
+}
+.chips-sm .chip {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 11.5px;
+}
+.chips-sm .chip-count {
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 10px;
+}
+
+/* Toggle switch */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.toggle-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.toggle-text small {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.toggle-track {
+  flex: none;
+  position: relative;
+  width: 34px;
+  height: 19px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.15s;
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.toggle input:checked + .toggle-track {
+  background: var(--amber);
+}
+.toggle input:checked + .toggle-track .toggle-thumb {
+  transform: translateX(15px);
+}
+.toggle input:focus-visible + .toggle-track {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.check-inline input {
+  accent-color: var(--amber);
+  margin: 0;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input[type='date'],
+input[type='time'] {
+  color-scheme: dark;
+}
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}

@@ -1,0 +1,32 @@
+appId: com.absar0920.duedesk
+productName: DueDesk
+copyright: Copyright (c) 2026 absar0920
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources/
+    to: .
+    filter:
+      - "**/*"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+  signAndEditExecutable: true
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DueDesk
+  artifactName: ${productName}-Setup-${version}-x64.${ext}
+portable:
+  artifactName: ${productName}-Portable-${version}-x64.${ext}
